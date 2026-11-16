@@ -12,6 +12,9 @@ ply==3.11
 sqlparse==0.6.0
 black==26.10.1
 
+# --- Testing (tests/, run with: pytest) ---
+pytest==9.1.1
+
 # --- Data handling and file formats (csv, json, excel, xml, html) ---
 pandas==3.1.0
 numpy==2.5.4
