@@ -186,6 +186,16 @@ def test_get_scaler_aggregate_size_ignores_column():
     assert get_scaler_aggregate(df, "size", "cost") == 5
 
 
+def test_get_scaler_aggregate_count_excludes_nulls():
+    # Regression test: "count" used to return df[column].shape[0], which
+    # counts every row including nulls - identical to "size" rather than
+    # "count", despite the function's own docstring and inline comment
+    # both saying "count of non-null values".
+    df = pd.DataFrame({"cost": [100, 200, None, 400]})
+    assert get_scaler_aggregate(df, "count", "cost") == 3
+    assert get_scaler_aggregate(df, "size", "cost") == 4
+
+
 def test_get_scaler_aggregate_unsupported_function_returns_none():
     df = _people_df()
     assert get_scaler_aggregate(df, "not_a_real_aggregate", "cost") is None
@@ -458,3 +468,51 @@ def test_apply_filtering_not_equal_operator():
     )
     assert "Eve" not in result["name"].tolist()
     assert len(result) == 4
+
+
+def test_apply_filtering_and_does_not_cartesian_blow_up_duplicate_rows():
+    # Regression test: apply_filtering's "and" branch used to compute
+    # pd.merge(left, right), a value-based natural join across every shared
+    # column. Two rows with identical values in every column (a real
+    # possibility - e.g. duplicate records) would then be matched against
+    # each other N*M times instead of being intersected by identity,
+    # fabricating rows that were never in the original data.
+    df = pd.DataFrame(
+        {
+            "name": ["Alice", "Alice", "Bob"],
+            "cost": [5000, 5000, 6000],
+        }
+    )
+    result = apply_filtering(
+        df,
+        {
+            "type": "and",
+            "left": {"type": ">=", "left": "cost", "right": 5000},
+            "right": {"type": "<=", "left": "cost", "right": 5500},
+        },
+    )
+    # Exactly the two original Alice rows, not 2*2=4.
+    assert len(result) == 2
+    assert (result["name"] == "Alice").all()
+
+
+def test_apply_filtering_and_keeps_rows_with_nan_in_other_columns():
+    # pd.merge (the old implementation) never matches NaN == NaN, so any
+    # row with a null in a shared column used to be dropped from an "and"
+    # result even when both conditions were about an unrelated column.
+    df = pd.DataFrame(
+        {
+            "name": ["Alice", "Bob"],
+            "note": [None, "ok"],
+            "cost": [5000, 6000],
+        }
+    )
+    result = apply_filtering(
+        df,
+        {
+            "type": "and",
+            "left": {"type": ">=", "left": "cost", "right": 0},
+            "right": {"type": "<", "left": "cost", "right": 10000},
+        },
+    )
+    assert sorted(result["name"].tolist()) == ["Alice", "Bob"]
