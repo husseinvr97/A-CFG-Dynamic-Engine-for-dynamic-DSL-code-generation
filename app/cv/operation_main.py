@@ -16,6 +16,16 @@ def get_details(folderPath) -> list[dict[str, str]]:
     reader.start()
     extractor.start()
     lock.acquire()
+    # Both threads are guaranteed to have finished by now: the extractor only
+    # releases `lock` from its own finally block, after it has stopped
+    # reading from `queue`. These joins just make that explicit and bound
+    # (instead of relying on scheduling) before we inspect .error below.
+    reader.join()
+    extractor.join()
+    if reader.error is not None:
+        raise reader.error
+    if extractor.error is not None:
+        raise extractor.error
     return res
 
 
