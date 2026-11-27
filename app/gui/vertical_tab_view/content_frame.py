@@ -6,9 +6,10 @@ import re
 import datetime
 
 
-# Add AI Assistant to path
-from ai_assistant.GEEQueryAssistant import GEEQueryAssistant
-
+# Add AI Assistant to path. This is optional: the ai_assistant package pulls
+# in heavy deps (langchain, chroma, playwright) that aren't required to run
+# the core DSL engine, so a missing/broken install there must not crash the
+# whole GUI at import time.
 try:
     from ai_assistant.GEEQueryAssistant import GEEQueryAssistant
 except ImportError:
@@ -396,15 +397,38 @@ class TabContent(ctk.CTkFrame):
             self.results_section.table_section.clear_table()
             self.error_section.clear_error()
             return
-        
-        execution_result = execute_python_code(python_code)
-        
+
+        # execute_python_code() runs the generated pandas/GEE code, which can
+        # take anywhere from milliseconds to many seconds (large CSVs, remote
+        # GEE calls, CV folder scans). Running it directly here would block
+        # Tkinter's single-threaded event loop for that whole time, freezing
+        # the entire GUI (no repaint, no window-close, nothing). So the work
+        # itself happens on a background thread, and only the final UI
+        # update is marshaled back onto the main thread via self.after(0, ...),
+        # which is the only thread-safe way to touch Tkinter widgets.
+        self.execute_btn.configure(state="disabled", text="Running...")
+
+        def run_in_background():
+            execution_result = execute_python_code(python_code)
+            self.after(0, lambda: self._on_execute_finished(execution_result))
+
+        threading.Thread(target=run_in_background, daemon=True).start()
+
+    def _on_execute_finished(self, execution_result):
+        # This runs back on the main thread (via self.after above). The frame
+        # may have been destroyed (e.g. the user switched/closed tabs) while
+        # the background execution was still running, so guard against
+        # updating widgets that no longer exist.
+        if not self.winfo_exists():
+            return
+        self.execute_btn.configure(state="normal", text="Execute")
+
         if isinstance(execution_result, Success):
             # Execution succeeded; display Python code and DataFrame results
             data_frame = execution_result.unwrap()
             self.results_section.table_section.set_table(data_frame)
             self.error_section.clear_error()
-            
+
             # Extract and store GEE metadata if this was a GEE query
             gee_metadata = self.extract_gee_metadata(self.last_sql_query)
             self.results_section.table_section.set_gee_metadata(gee_metadata)
