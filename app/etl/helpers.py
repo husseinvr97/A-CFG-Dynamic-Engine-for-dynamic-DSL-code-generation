@@ -31,7 +31,27 @@ def apply_filtering(data: pd.DataFrame, filters_expressions_tree: dict) -> pd.Da
         if operator == "or":
             data = pd.concat([left, right])
         else:
-            data = pd.merge(left, right)
+            # AND: keep rows that satisfy both conditions, i.e. the
+            # original rows present in both filtered results.
+            #
+            # This used to be `pd.merge(left, right)`, which joins by
+            # *value* across every shared column (both sides here always
+            # share every column of `data`, just with different rows kept)
+            # rather than by original row identity. That is wrong in two
+            # ways:
+            #  1. If two distinct rows happen to have identical values in
+            #     every column (duplicate records - not rare in real
+            #     data), the value-based join matches each occurrence on
+            #     one side against each occurrence on the other, so N
+            #     matching rows on each side fabricate N*N rows in the
+            #     result - a cartesian-product blow-up that silently
+            #     corrupts the row count.
+            #  2. pandas merge (like a SQL join) never matches NaN == NaN,
+            #     so any row where a filtered column is null is dropped
+            #     from the AND result even when it should have been kept.
+            # Intersecting by index avoids both: each original row can
+            # only appear once, matched by identity rather than value.
+            data = data.loc[data.index.isin(left.index) & data.index.isin(right.index)]
         return data[~data.index.duplicated(keep="first")]
 
     left_operand: str = filters_expressions_tree["left"]
@@ -112,8 +132,12 @@ def get_scaler_aggregate(df: pd.DataFrame, aggregate: str, column: str) -> Any:
         # Sum of values
         return df[column].sum()
     elif aggregate == "count":
-        # Count of non-null values
-        return df[column].shape[0]
+        # Count of non-null values. `.shape[0]` (the previous
+        # implementation) counts every row including nulls, which is
+        # identical to "size" rather than "count" and contradicts this
+        # function's own docstring/comment. `.count()` is the pandas
+        # Series method that actually excludes NaN/None.
+        return df[column].count()
     elif aggregate == "first":
         # First value in the column
         return df[column].iloc[0]
