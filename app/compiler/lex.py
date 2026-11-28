@@ -121,27 +121,46 @@ aggregation_re = r"\b(?:(?![\{\[])(?:" + "|".join(agg_functions) + r")\b(?![\}\]
 
 
 # region this code to not conflict with SIMPE_COLNAME
-@TOKEN(r"select")
+#
+# PLY tries function-based token rules in the order they are defined in this
+# file (not by longest match), using re.match (anchored only at the start,
+# not the end) at the current lexer position. Every reserved-word rule below
+# is defined before t_SIMPLE_COLNAME, so for an identifier that merely
+# *starts with* a reserved word - e.g. a column/table named "selected",
+# "description", "order_id", "update_time", "joint_account" - the keyword
+# rule used to match just its own literal letters ("select", "desc",
+# "order", "update", "join") and win, splitting the rest of the identifier
+# ("ed", "ription", "_id", "_time", "t_account") off into a second,
+# unrelated SIMPLE_COLNAME token, instead of the whole thing being
+# recognized as a single identifier.
+#
+# The `\b` (word-boundary) suffix on each pattern fixes this: it requires
+# that the character right after the keyword NOT be another identifier
+# character (letter/digit/underscore), so "select " or "select;" still
+# tokenize as SELECT, but "selected" now correctly falls through to
+# t_SIMPLE_COLNAME instead of being chopped up. This mirrors the boundary
+# anchoring `aggregation_re` already uses further down for the same reason.
+@TOKEN(r"select\b")
 def t_SELECT(t):
     return t
 
 
-@TOKEN(r"distinct")
+@TOKEN(r"distinct\b")
 def t_DISTINCT(t):
     return t
 
 
-@TOKEN(r"from")
+@TOKEN(r"from\b")
 def t_FROM(t):
     return t
 
 
-@TOKEN(r"into")
+@TOKEN(r"into\b")
 def t_INTO(t):
     return t
 
 
-@TOKEN(r"group")
+@TOKEN(r"group\b")
 def t_GROUP(t):
     return t
 
@@ -152,128 +171,128 @@ def t_AGGREGATION_FUNCTION(t):
     return t
 
 
-@TOKEN(r"order")
+@TOKEN(r"order\b")
 def t_ORDER(t):
     return t
 
 
-@TOKEN(r"by")
+@TOKEN(r"by\b")
 def t_BY(t):
     return t
 
 
-@TOKEN(r"where")
+@TOKEN(r"where\b")
 def t_WHERE(t):
     return t
 
 
-@TOKEN(r"like")
+@TOKEN(r"like\b")
 def t_LIKE(t):
     t.value = t.value.lower()
     return t
 
 
-@TOKEN(r"not")
+@TOKEN(r"not\b")
 def t_NOT(t):
     t.value = t.value.lower()
     return t
 
 
-@TOKEN(r"and")
+@TOKEN(r"and\b")
 def t_AND(t):
     t.value = t.value.lower()
     return t
 
 
-@TOKEN(r"or")
+@TOKEN(r"or\b")
 def t_OR(t):
     t.value = t.value.lower()
     return t
 
 
-@TOKEN(r"insert")
+@TOKEN(r"insert\b")
 def t_INSERT(t):
     return t
 
 
-@TOKEN(r"values")
+@TOKEN(r"values\b")
 def t_VALUES(t):
     return t
 
 
-@TOKEN(r"update")
+@TOKEN(r"update\b")
 def t_UPDATE(t):
     return t
 
 
-@TOKEN(r"set")
+@TOKEN(r"set\b")
 def t_SET(t):
     return t
 
 
-@TOKEN(r"delete")
+@TOKEN(r"delete\b")
 def t_DELETE(t):
     return t
 
 
-@TOKEN(r"desc")
+@TOKEN(r"desc\b")
 def t_DESC(t):
     return t
 
 
-@TOKEN(r"asc")
+@TOKEN(r"asc\b")
 def t_ASC(t):
     return t
 
 
-@TOKEN(r"limit")
+@TOKEN(r"limit\b")
 def t_LIMIT(t):
     t.value = t.value.lower()
     return t
 
 
-@TOKEN(r"tail")
+@TOKEN(r"tail\b")
 def t_TAIL(t):
     t.value = t.value.lower()
     return t
 
 
-@TOKEN(r"as")
+@TOKEN(r"as\b")
 def t_AS(t):
     return t
 
 
-@TOKEN(r"join")
+@TOKEN(r"join\b")
 def t_JOIN(t):
     return t
 
 
-@TOKEN(r"inner")
+@TOKEN(r"inner\b")
 def t_INNER(t):
     return t
 
 
-@TOKEN(r"left")
+@TOKEN(r"left\b")
 def t_LEFT(t):
     return t
 
 
-@TOKEN(r"right")
+@TOKEN(r"right\b")
 def t_RIGHT(t):
     return t
 
 
-@TOKEN(r"full")
+@TOKEN(r"full\b")
 def t_FULL(t):
     return t
 
 
-@TOKEN(r"outer")
+@TOKEN(r"outer\b")
 def t_OUTER(t):
     return t
 
 
-@TOKEN(r"on")
+@TOKEN(r"on\b")
 def t_ON(t):
     return t
 
