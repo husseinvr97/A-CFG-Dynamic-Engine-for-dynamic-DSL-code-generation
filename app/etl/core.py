@@ -19,9 +19,6 @@ from app.etl.helpers import (
 )
 
 
-transformed_data = None
-
-
 def extract(data_source_type: str, data_source_path: str) -> pd.DataFrame:
     data_extractor: IExtractor = ExtractorDataFactory.create(
         data_source_type, data_source_path
@@ -140,8 +137,6 @@ def transform_select(data: pd.DataFrame, criteria: dict) -> pd.DataFrame:
         else:
             data = data[-number:]
 
-    global transformed_data
-    transformed_data = data
     return data
 
 
@@ -172,8 +167,6 @@ def join(
         tolerance:     Tolerance for approximate numeric joins. If None, exact match.
                        For coordinates/floats, use decimal places (e.g., 0.0001 for ~11m precision).
     """
-    global transformed_data
-
     valid_join_types = ["inner", "left", "right", "outer"]
     if how not in valid_join_types:
         raise ValueError(f"Invalid join type '{how}'. Must be one of {valid_join_types}")
@@ -182,24 +175,19 @@ def join(
         raise ValueError("Input DataFrames must not be None")
 
     if df1.empty and df2.empty:
-        transformed_data = pd.DataFrame()
-        return transformed_data
+        return pd.DataFrame()
 
     if df1.empty:
         if how in ["inner", "left"]:
-            transformed_data = pd.DataFrame()
-            return transformed_data
+            return pd.DataFrame()
         else:
-            transformed_data = df2.copy()
-            return transformed_data
+            return df2.copy()
 
     if df2.empty:
         if how in ["inner", "right"]:
-            transformed_data = pd.DataFrame()
-            return transformed_data
+            return pd.DataFrame()
         else:
-            transformed_data = df1.copy()
-            return transformed_data
+            return df1.copy()
 
     if left_col not in df1.columns:
         raise KeyError(
@@ -288,7 +276,6 @@ def join(
                 f"(left_col={left_col}, right_col={right_col}, how={how})"
             )
 
-    transformed_data = result
     return result
 
 
@@ -302,14 +289,6 @@ def load(data: pd.DataFrame, source_type: str, data_destination: str) -> None:
 
 
 # Utilities
-def get_transformed_data() -> pd.DataFrame:
-    global transformed_data
-    return transformed_data
-
-def clear_transformed_data() -> None:
-    global transformed_data
-    transformed_data = None
-
 def preview_data(data: pd.DataFrame, rows: int = 5) -> pd.DataFrame:
     return data.head(rows)
 
