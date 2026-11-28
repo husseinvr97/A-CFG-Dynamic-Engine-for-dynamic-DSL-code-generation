@@ -122,10 +122,36 @@ def execute_python_code(
             - Failure[PythonExecutionError, None]: Contains a `PythonExecutionError` object with details of the error and stack trace if execution fails.
     """
     try:
-        exec(python_code)
-        from app.etl.core import transformed_data
+        # Run the generated code in its own fresh namespace dict, instead of
+        # the implicit exec(python_code) (no explicit globals) this used to
+        # be. The old version relied on transform_select()/join() in
+        # app.etl.core also writing their result into a module-level
+        # `core.transformed_data` global as a side effect, which this
+        # function then read back via `from app.etl.core import
+        # transformed_data` - using that global purely as a mailbox to get
+        # the value out of the exec() call.
+        #
+        # That mailbox is shared by every call to execute_python_code() in
+        # the whole process. If two queries run concurrently - e.g. two
+        # background threads from the GUI (see the Execute-button threading
+        # fix), or two tabs, or just two quick successive clicks - the one
+        # that finishes last silently overwrites the global before the
+        # other has had a chance to read it, so a thread can read back
+        # another thread's result instead of its own. Reproduced live with
+        # two queries against two different CSVs: thread A's query reliably
+        # came back with thread B's data under forced interleaving.
+        #
+        # Executing into a private `exec_globals` dict removes the shared
+        # state entirely - each call gets its own isolated namespace, so
+        # there is nothing left for a concurrent call to step on.
+        exec_globals: dict = {}
+        exec(python_code, exec_globals)
 
-        return Success(transformed_data)
+        # Write-only statements (INSERT) compile to code that calls
+        # etl.load(...) and never assigns a `transformed_data` variable at
+        # all - that's legitimate, not an error, so return a successful
+        # "no result" rather than failing the whole execution.
+        return Success(exec_globals.get("transformed_data"))
 
     except Exception as ex:
         print(ex)
